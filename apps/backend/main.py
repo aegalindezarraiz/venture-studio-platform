@@ -109,14 +109,21 @@ app.include_router(notion_routes.router, prefix="/notion", tags=["notion"])
 from app.api.routes import status as status_routes
 app.include_router(status_routes.router, prefix="/status", tags=["status"])
 
+# ── Catálogo 500 agentes ──────────────────────────────────────────────────────
+try:
+    from app.api.routes import agents_platform
+    app.include_router(agents_platform.router, prefix="/agents", tags=["agents"])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"agents_platform no cargado: {e}")
+
 # ── Rutas principales ─────────────────────────────────────────────────────────
 try:
-    from app.api.routes import auth, organizations, startups, agents, prompts, workflows, memory
+    from app.api.routes import auth, organizations, startups, prompts, workflows, memory
 
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
     app.include_router(startups.router, prefix="/startups", tags=["startups"])
-    app.include_router(agents.router, prefix="/agents", tags=["agents"])
     app.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
     app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
     app.include_router(memory.router, prefix="/memory", tags=["memory"])
