@@ -117,6 +117,14 @@ except ImportError as e:
     import warnings
     warnings.warn(f"agents_platform no cargado: {e}")
 
+# ── Monitor de Agentes (panel en tiempo real → Notion) ────────────────────────
+try:
+    from app.api.routes import monitor as monitor_routes
+    app.include_router(monitor_routes.router, prefix="/monitor", tags=["monitor"])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"monitor no cargado: {e}")
+
 # ── Rutas principales ─────────────────────────────────────────────────────────
 try:
     from app.api.routes import auth, organizations, startups, prompts, workflows, memory
