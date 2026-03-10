@@ -68,6 +68,39 @@ async def root():
     return {"message": "AI Venture Studio OS API — visita /docs"}
 
 
+# ── Notion: tareas ────────────────────────────────────────────────────────────
+NOTION_DATABASE_ID = os.environ.get(
+    "NOTION_DATABASE_ID", "1a166396f42a806ea9e1c2512f451f28"
+)
+
+
+@app.get("/tasks", tags=["notion"])
+async def get_tasks():
+    """Consulta la base de datos de Notion y devuelve los nombres de las tareas."""
+    if notion is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="Notion no configurado. Añade NOTION_TOKEN en las variables de entorno.",
+        )
+
+    response = notion.databases.query(database_id=NOTION_DATABASE_ID)
+
+    tasks = []
+    for page in response.get("results", []):
+        properties = page.get("properties", {})
+        # Busca la propiedad de tipo title (puede llamarse 'Name', 'Nombre', 'Tarea', etc.)
+        for prop in properties.values():
+            if prop.get("type") == "title":
+                title_parts = prop.get("title", [])
+                name = "".join(t.get("plain_text", "") for t in title_parts).strip()
+                if name:
+                    tasks.append(name)
+                break
+
+    return {"total": len(tasks), "tasks": tasks}
+
+
 # ── Rutas principales ─────────────────────────────────────────────────────────
 # Se importan aquí para que los errores de configuración sean visibles al arrancar
 try:
