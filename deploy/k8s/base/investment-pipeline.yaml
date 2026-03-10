@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: investment-pipeline
   namespace: venture-studio
   labels:
-    app: backend
+    app: investment-pipeline
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: investment-pipeline
   template:
     metadata:
       labels:
-        app: backend
+        app: investment-pipeline
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8006"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: investment-pipeline
+          image: ghcr.io/aegalindezarraiz/investment-pipeline:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8006
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8006"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8006
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8006
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: investment-pipeline
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: investment-pipeline
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8006
+      targetPort: 8006
   type: ClusterIP

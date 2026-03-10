@@ -1,56 +1,74 @@
-.PHONY: help up down build logs migrate seed test lint format clean
-
-help:
-	@echo ""
-	@echo "AI Venture Studio OS — Commands"
-	@echo "================================"
-	@echo "  make up          Start all services"
-	@echo "  make down        Stop all services"
-	@echo "  make build       Rebuild all images"
-	@echo "  make logs        Tail all logs"
-	@echo "  make migrate     Run Alembic migrations"
-	@echo "  make seed        Seed demo data"
-	@echo "  make test        Run all tests"
-	@echo "  make lint        Lint Python + TypeScript"
-	@echo "  make format      Format all code"
-	@echo "  make smoke       Run smoke tests"
-	@echo "  make clean       Remove volumes and containers"
-	@echo ""
+.PHONY: up down logs build ps shell seed status test lint
 
 up:
-	cp -n .env.example .env 2>/dev/null || true
-	docker compose up -d
+	docker compose up -d $(if $(s),$(s))
 
 down:
 	docker compose down
 
-build:
-	docker compose build --no-cache
-
 logs:
-	docker compose logs -f
+	docker compose logs -f $(s)
 
-migrate:
-	docker compose exec backend alembic upgrade head
+build:
+	docker compose build $(s)
 
-seed:
-	docker compose exec backend python -m app.scripts.seed
+ps:
+	docker compose ps
 
-test:
-	docker compose exec backend pytest apps/backend/tests -v
-	cd apps/frontend && npm test -- --run
+shell:
+	docker compose exec $(s) /bin/sh
+
+db-migrate:
+	cd apps/backend && alembic upgrade head
+
+db-rollback:
+	cd apps/backend && alembic downgrade -1
+
+db-seed:
+	python scripts/seed_agents.py --direct
+
+install:
+	pip install -r apps/backend/requirements.txt
 
 lint:
-	docker compose exec backend ruff check apps/
-	cd apps/frontend && npm run lint
+	ruff check apps/ packages/ scripts/
 
-format:
-	docker compose exec backend ruff format apps/
-	cd apps/frontend && npm run format
+fmt:
+	ruff format apps/ packages/ scripts/
 
-smoke:
-	bash scripts/smoke_test.sh
+test:
+	pytest tests/ -v
 
-clean:
-	docker compose down -v --remove-orphans
-	docker system prune -f
+monitor-seed:
+	curl -X POST http://localhost:8000/monitor/seed
+
+status:
+	curl -s http://localhost:8000/status
+
+health-sync:
+	curl -X POST http://localhost:8000/monitor/sync-health
+
+agents-seed:
+	curl -X POST http://localhost:8000/agents/seed/notion
+
+TAG ?= latest
+REGISTRY ?= ghcr.io/aegalindezarraiz
+
+push:
+	docker compose build
+	docker tag vs-api-gateway $(REGISTRY)/api-gateway:$(TAG)
+	docker tag vs-backend $(REGISTRY)/backend:$(TAG)
+	docker push $(REGISTRY)/api-gateway:$(TAG)
+	docker push $(REGISTRY)/backend:$(TAG)
+
+help:
+	@echo "AI Venture Studio OS"
+	@echo "  make up            Start all services"
+	@echo "  make up s=backend  Start specific service"
+	@echo "  make down          Stop all"
+	@echo "  make logs s=api-gateway"
+	@echo "  make build"
+	@echo "  make db-migrate"
+	@echo "  make monitor-seed  Populate Notion Monitor"
+	@echo "  make status        Platform health"
+	@echo "  make lint / test"

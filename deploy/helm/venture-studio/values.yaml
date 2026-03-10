@@ -1,0 +1,155 @@
+# ====================================================================
+#  AI Venture Studio OS — Helm Values
+#  Override with: helm upgrade -f values-production.yaml
+# ====================================================================
+
+global:
+  imageRegistry: ghcr.io/aegalindezarraiz
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+  environment: production
+  replicaCount: 2
+
+# ── Ingress ────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: api.venture-studio.ai
+  tls: true
+  tlsSecretName: venture-studio-tls
+
+# ── Services ──────────────────────────────────────────────────────────────────
+apiGateway:
+  enabled: true
+  image: api-gateway
+  port: 8000
+  replicaCount: 2
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+backend:
+  enabled: true
+  image: backend
+  port: 8020
+  replicaCount: 2
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+agentOrchestrator:
+  enabled: true
+  image: agent-orchestrator
+  port: 8001
+  replicaCount: 3
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2000m, memory: 2Gi }
+
+marketIntel:
+  enabled: true
+  image: market-intel
+  port: 8002
+  replicaCount: 2
+
+opportunityEngine:
+  enabled: true
+  image: opportunity-engine
+  port: 8003
+  replicaCount: 2
+
+productFactory:
+  enabled: true
+  image: product-factory
+  port: 8004
+  replicaCount: 2
+
+startupGenerator:
+  enabled: true
+  image: startup-generator
+  port: 8005
+  replicaCount: 2
+
+investmentPipeline:
+  enabled: true
+  image: investment-pipeline
+  port: 8006
+  replicaCount: 2
+
+growthEngine:
+  enabled: true
+  image: growth-engine
+  port: 8007
+  replicaCount: 2
+
+founderCopilot:
+  enabled: true
+  image: founder-copilot
+  port: 8008
+  replicaCount: 2
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2000m, memory: 2Gi }
+
+authService:
+  enabled: true
+  image: auth-service
+  port: 8010
+  replicaCount: 2
+
+orgService:
+  enabled: true
+  image: org-service
+  port: 8011
+  replicaCount: 1
+
+billingService:
+  enabled: true
+  image: billing-service
+  port: 8012
+  replicaCount: 1
+
+# ── Infrastructure ─────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: venture
+    password: ""   # set via --set postgresql.auth.password=xxx
+    database: venture_studio
+  primary:
+    persistence:
+      size: 20Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""   # set via --set redis.auth.password=xxx
+  master:
+    persistence:
+      size: 8Gi
+
+qdrant:
+  enabled: true
+  persistence:
+    size: 50Gi
+
+# ── Monitoring ─────────────────────────────────────────────────────────────────
+monitoring:
+  enabled: true
+  prometheus:
+    retention: 30d
+  grafana:
+    adminPassword: ""
+
+# ── Secrets (set externally, never commit values) ─────────────────────────────
+secrets:
+  anthropicApiKey: ""
+  notionToken: ""
+  secretKey: ""
+  stripeSecretKey: ""

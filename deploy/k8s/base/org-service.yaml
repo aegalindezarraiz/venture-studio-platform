@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: org-service
   namespace: venture-studio
   labels:
-    app: backend
+    app: org-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: org-service
   template:
     metadata:
       labels:
-        app: backend
+        app: org-service
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8011"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: org-service
+          image: ghcr.io/aegalindezarraiz/org-service:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8011
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8011"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8011
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8011
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: org-service
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: org-service
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8011
+      targetPort: 8011
   type: ClusterIP

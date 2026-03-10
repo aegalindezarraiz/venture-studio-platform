@@ -3,5 +3,4 @@ kind: Namespace
 metadata:
   name: venture-studio
   labels:
-    app.kubernetes.io/managed-by: kustomize
-    environment: base
+    app.kubernetes.io/managed-by: helm

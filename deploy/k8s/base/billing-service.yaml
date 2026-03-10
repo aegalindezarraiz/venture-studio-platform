@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: billing-service
   namespace: venture-studio
   labels:
-    app: backend
+    app: billing-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: billing-service
   template:
     metadata:
       labels:
-        app: backend
+        app: billing-service
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8012"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: billing-service
+          image: ghcr.io/aegalindezarraiz/billing-service:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8012
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8012"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8012
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8012
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: billing-service
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: billing-service
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8012
+      targetPort: 8012
   type: ClusterIP

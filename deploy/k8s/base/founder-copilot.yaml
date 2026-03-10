@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: founder-copilot
   namespace: venture-studio
   labels:
-    app: backend
+    app: founder-copilot
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: backend
+      app: founder-copilot
   template:
     metadata:
       labels:
-        app: backend
+        app: founder-copilot
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8008"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: founder-copilot
+          image: ghcr.io/aegalindezarraiz/founder-copilot:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8008
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8008"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8008
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8008
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: founder-copilot
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: founder-copilot
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8008
+      targetPort: 8008
   type: ClusterIP

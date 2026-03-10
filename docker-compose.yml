@@ -1,143 +1,224 @@
 version: "3.9"
 
+x-python-base: &python-base
+  env_file: .env
+  restart: unless-stopped
+  networks: [venture-net]
+
+x-ai-service: &ai-service
+  <<: *python-base
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis:    { condition: service_healthy }
+
 services:
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
+    container_name: vs-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-venture}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-venture}
-      POSTGRES_DB: ${POSTGRES_DB:-venture_studio}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: venture
+      POSTGRES_PASSWORD: venture
+      POSTGRES_DB: venture_studio
     volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-venture}"]
+      test: ["CMD-SHELL", "pg_isready -U venture -d venture_studio"]
       interval: 5s
-      retries: 5
+      timeout: 3s
+      retries: 10
+    networks: [venture-net]
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+    container_name: vs-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes: [redis-data:/data]
+    ports: ["6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
+      timeout: 3s
       retries: 5
+    networks: [venture-net]
 
   qdrant:
-    image: qdrant/qdrant:v1.9.1
-    restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
+    image: qdrant/qdrant:v1.9.4
+    container_name: vs-qdrant
+    volumes: [qdrant-data:/qdrant/storage]
+    ports: ["6333:6333", "6334:6334"]
+    networks: [venture-net]
 
   nats:
     image: nats:2.10-alpine
-    restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--jetstream", "--http_port", "8222"]
+    container_name: vs-nats
+    command: ["-js", "-m", "8222", "--name", "venture-studio"]
+    ports: ["4222:4222", "8222:8222"]
+    networks: [venture-net]
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: vs-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["9090:9090"]
+    networks: [venture-net]
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: vs-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: venture
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes: [grafana-data:/var/lib/grafana]
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+    networks: [venture-net]
+
+  api-gateway:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/api-gateway/Dockerfile }
+    container_name: vs-api-gateway
+    ports: ["8000:8000"]
+    environment:
+      PORT: 8000
+      AUTH_SERVICE_URL: http://auth-service:8010
+      BACKEND_URL: http://backend:8020
+      AGENT_ORCHESTRATOR_URL: http://agent-orchestrator:8001
+      MARKET_INTEL_URL: http://market-intel:8002
+      OPPORTUNITY_ENGINE_URL: http://opportunity-engine:8003
+      PRODUCT_FACTORY_URL: http://product-factory:8004
+      STARTUP_GENERATOR_URL: http://startup-generator:8005
+      INVESTMENT_PIPELINE_URL: http://investment-pipeline:8006
+      GROWTH_ENGINE_URL: http://growth-engine:8007
+      FOUNDER_COPILOT_URL: http://founder-copilot:8008
+    depends_on: [auth-service, backend]
+    networks: [venture-net]
 
   backend:
-    build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_started
-    volumes:
-      - ./apps/backend:/app
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/backend/Dockerfile }
+    container_name: vs-backend
+    ports: ["8020:8020"]
+    environment:
+      PORT: 8020
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
 
-  worker:
-    build:
-      context: ./apps/worker
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_started
-    volumes:
-      - ./apps/worker:/app
+  auth-service:
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/auth-service/Dockerfile }
+    container_name: vs-auth-service
+    ports: ["8010:8010"]
+    environment:
+      PORT: 8010
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
 
-  agent_runtime:
-    build:
-      context: ./apps/agent_runtime
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8001:8001"
-    depends_on:
-      - nats
-      - postgres
+  org-service:
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/org-service/Dockerfile }
+    container_name: vs-org-service
+    ports: ["8011:8011"]
+    environment:
+      PORT: 8011
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
 
-  scaleos_supervisor:
-    build:
-      context: ./apps/scaleos_supervisor
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8002:8002"
-    depends_on:
-      - nats
-      - postgres
+  billing-service:
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/billing-service/Dockerfile }
+    container_name: vs-billing-service
+    ports: ["8012:8012"]
+    environment:
+      PORT: 8012
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
 
-  seo_osint_agent:
-    build:
-      context: ./apps/seo_osint_agent
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8003:8003"
-    depends_on:
-      - nats
+  agent-orchestrator:
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/agent-orchestrator/Dockerfile }
+    container_name: vs-agent-orchestrator
+    ports: ["8001:8001"]
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      NATS_URL: nats://nats:4222
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
-  growth_intelligence_agent:
-    build:
-      context: ./apps/growth_intelligence_agent
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8004:8004"
-    depends_on:
-      - nats
+  market-intel:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/market-intel/Dockerfile }
+    container_name: vs-market-intel
+    ports: ["8002:8002"]
+    environment: { PORT: 8002, ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}" }
 
-  frontend:
-    build:
-      context: ./apps/frontend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
+  opportunity-engine:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/opportunity-engine/Dockerfile }
+    container_name: vs-opportunity-engine
+    ports: ["8003:8003"]
+    environment: { PORT: 8003, ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}" }
+
+  product-factory:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/product-factory/Dockerfile }
+    container_name: vs-product-factory
+    ports: ["8004:8004"]
+    environment: { PORT: 8004, ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}" }
+
+  startup-generator:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/startup-generator/Dockerfile }
+    container_name: vs-startup-generator
+    ports: ["8005:8005"]
+    environment: { PORT: 8005, ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}" }
+
+  investment-pipeline:
+    <<: *ai-service
+    build: { context: ., dockerfile: apps/investment-pipeline/Dockerfile }
+    container_name: vs-investment-pipeline
+    ports: ["8006:8006"]
+    environment:
+      PORT: 8006
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DATABASE_URL: postgresql://venture:venture@postgres:5432/venture_studio
+
+  growth-engine:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/growth-engine/Dockerfile }
+    container_name: vs-growth-engine
+    ports: ["8007:8007"]
+    environment: { PORT: 8007, ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}" }
+
+  founder-copilot:
+    <<: *python-base
+    build: { context: ., dockerfile: apps/founder-copilot/Dockerfile }
+    container_name: vs-founder-copilot
+    ports: ["8008:8008"]
+    environment:
+      PORT: 8008
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+    depends_on: [redis]
 
 volumes:
-  pg_data:
-  redis_data:
-  qdrant_data:
+  postgres-data:
+  redis-data:
+  qdrant-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  venture-net:
+    driver: bridge
+    name: venture-studio-network

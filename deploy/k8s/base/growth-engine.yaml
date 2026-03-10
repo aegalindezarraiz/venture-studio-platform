@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: growth-engine
   namespace: venture-studio
   labels:
-    app: backend
+    app: growth-engine
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: growth-engine
   template:
     metadata:
       labels:
-        app: backend
+        app: growth-engine
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8007"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: growth-engine
+          image: ghcr.io/aegalindezarraiz/growth-engine:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8007
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8007"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8007
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8007
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: growth-engine
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: growth-engine
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8007
+      targetPort: 8007
   type: ClusterIP

@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: opportunity-engine
   namespace: venture-studio
   labels:
-    app: backend
+    app: opportunity-engine
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: opportunity-engine
   template:
     metadata:
       labels:
-        app: backend
+        app: opportunity-engine
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8003"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: opportunity-engine
+          image: ghcr.io/aegalindezarraiz/opportunity-engine:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8003
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8003"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8003
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8003
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: opportunity-engine
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: opportunity-engine
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8003
+      targetPort: 8003
   type: ClusterIP

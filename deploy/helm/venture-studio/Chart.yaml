@@ -1,0 +1,26 @@
+apiVersion: v2
+name: venture-studio-os
+description: AI Venture Studio OS - Complete enterprise platform helm chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - venture-studio
+  - startup
+  - agents
+home: https://github.com/aegalindezarraiz/venture-studio-platform
+sources:
+  - https://github.com/aegalindezarraiz/venture-studio-platform
+maintainers:
+  - name: Angel Galindez
+    email: aegalindezarraiz@gmail.com
+dependencies:
+  - name: postgresql
+    version: "15.5.4"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: "19.5.5"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

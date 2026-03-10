@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: agent-orchestrator
   namespace: venture-studio
   labels:
-    app: backend
+    app: agent-orchestrator
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
-      app: backend
+      app: agent-orchestrator
   template:
     metadata:
       labels:
-        app: backend
+        app: agent-orchestrator
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8020"
+        prometheus.io/port: "8001"
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/aegalindezarraiz/backend:latest
+        - name: agent-orchestrator
+          image: ghcr.io/aegalindezarraiz/agent-orchestrator:latest
           ports:
-            - containerPort: 8020
+            - containerPort: 8001
           envFrom:
             - configMapRef:
                 name: venture-studio-config
@@ -30,7 +30,7 @@ spec:
                 name: venture-studio-secrets
           env:
             - name: PORT
-              value: "8020"
+              value: "8001"
           resources:
             requests:
               cpu: 100m
@@ -41,25 +41,25 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8001
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /health
-              port: 8020
+              port: 8001
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend
+  name: agent-orchestrator
   namespace: venture-studio
 spec:
   selector:
-    app: backend
+    app: agent-orchestrator
   ports:
-    - port: 8020
-      targetPort: 8020
+    - port: 8001
+      targetPort: 8001
   type: ClusterIP
