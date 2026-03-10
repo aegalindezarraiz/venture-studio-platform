@@ -101,8 +101,11 @@ async def get_tasks():
     return {"total": len(tasks), "tasks": tasks}
 
 
+# ── Rutas Notion (siempre activas si hay NOTION_TOKEN) ────────────────────────
+from app.api.routes import notion as notion_routes
+app.include_router(notion_routes.router, prefix="/notion", tags=["notion"])
+
 # ── Rutas principales ─────────────────────────────────────────────────────────
-# Se importan aquí para que los errores de configuración sean visibles al arrancar
 try:
     from app.api.routes import auth, organizations, startups, agents, prompts, workflows, memory
 
@@ -114,6 +117,5 @@ try:
     app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
     app.include_router(memory.router, prefix="/memory", tags=["memory"])
 except ImportError as e:
-    # Modo mínimo: solo health disponible hasta que se implementen las rutas
     import warnings
-    warnings.warn(f"Rutas no cargadas (modo mínimo): {e}")
+    warnings.warn(f"Rutas opcionales no cargadas (modo mínimo): {e}")

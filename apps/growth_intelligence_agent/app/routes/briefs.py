@@ -50,6 +50,25 @@ async def create_brief(payload: BriefCreate):
         brief["content"] = "Brief generado en modo demo (sin API key)."
 
     brief["status"] = "ready"
+
+    # ── Sincronizar con Notion ────────────────────────────────────────────────
+    if brief["content"] and payload.startup_id:
+        try:
+            from app.services.notion_sync import push_brief, push_tasks_from_brief
+            notion_brief = push_brief(
+                startup_id=payload.startup_id,
+                startup_name=payload.startup_name,
+                brief_content=brief["content"],
+            )
+            brief["notion_brief_id"] = notion_brief.get("id")
+            push_tasks_from_brief(
+                brief_content=brief["content"],
+                startup_id=payload.startup_id,
+                brief_notion_id=notion_brief.get("id"),
+            )
+        except Exception:
+            pass  # Notion sync es best-effort, no bloquea la respuesta
+
     return brief
 
 
