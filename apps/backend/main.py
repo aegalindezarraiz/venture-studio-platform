@@ -101,9 +101,13 @@ async def get_tasks():
     return {"total": len(tasks), "tasks": tasks}
 
 
-# ── Rutas Notion (siempre activas si hay NOTION_TOKEN) ────────────────────────
+# ── Rutas Notion ──────────────────────────────────────────────────────────────
 from app.api.routes import notion as notion_routes
 app.include_router(notion_routes.router, prefix="/notion", tags=["notion"])
+
+# ── Status dashboard (tiempo real) ────────────────────────────────────────────
+from app.api.routes import status as status_routes
+app.include_router(status_routes.router, prefix="/status", tags=["status"])
 
 # ── Rutas principales ─────────────────────────────────────────────────────────
 try:
