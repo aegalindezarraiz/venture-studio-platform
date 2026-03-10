@@ -1,0 +1,12 @@
+# Normalizar line endings: LF en repositorio, conversión automática por OS
+* text=auto
+
+# Scripts shell siempre LF (obligatorio para ejecutar en Linux/Railway)
+*.sh text eol=lf
+Makefile text eol=lf
+
+# Archivos binarios sin conversión
+*.zip binary
+*.png binary
+*.jpg binary
+*.pdf binary
