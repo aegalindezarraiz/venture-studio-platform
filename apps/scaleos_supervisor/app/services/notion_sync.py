@@ -1,12 +1,10 @@
-"""
-Sincronización del ScaleOS Supervisor con Notion.
-Lee OKRs, actualiza su status y genera Weekly Reviews automáticamente.
-"""
+"""Sincronización del ScaleOS Supervisor con Notion."""
 import os
 import httpx
 from datetime import datetime
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+_agent_notion_id: str | None = None
 
 
 def _get(path: str, params: dict = {}) -> dict:
@@ -36,68 +34,65 @@ def _patch(path: str, payload: dict) -> dict:
         return {"error": str(e)}
 
 
+def register_self() -> str | None:
+    global _agent_notion_id
+    result = _post("/agents", {
+        "name": "ScaleOS Supervisor",
+        "type": "Supervisor",
+        "service_url": os.environ.get("SCALEOS_SUPERVISOR_URL", "http://scaleos_supervisor:8002"),
+        "model": os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-6"),
+    })
+    _agent_notion_id = result.get("id")
+    return _agent_notion_id
+
+
+def get_all_startups() -> list[dict]:
+    return _get("/startups", {"status": "Activa"}).get("startups", [])
+
+
 def get_at_risk_okrs(startup_id: str | None = None) -> list[dict]:
-    """Obtiene OKRs en estado 'At risk' u 'Off track'."""
-    all_okrs = []
+    okrs = []
     for status in ("At risk", "Off track"):
-        result = _get("/okrs", {"startup_id": startup_id or "", "status": status})
-        all_okrs.extend(result.get("okrs", []))
-    return all_okrs
+        params = {"status": status}
+        if startup_id:
+            params["startup_id"] = startup_id
+        okrs.extend(_get("/okrs", params).get("okrs", []))
+    return okrs
 
 
-def mark_okr_off_track(okr_id: str, progress: float) -> dict:
-    return _patch(f"/okrs/{okr_id}", {"status": "Off track", "progress": progress})
+def flag_okr(okr_id: str, status: str, progress: float) -> dict:
+    return _patch(f"/okrs/{okr_id}", {"status": status, "progress": progress})
 
 
-def mark_okr_on_track(okr_id: str, progress: float) -> dict:
-    return _patch(f"/okrs/{okr_id}", {"status": "On track", "progress": progress})
+def create_recovery_task(okr_name: str, startup_id: str) -> dict:
+    return _post("/tasks", {
+        "name": f"Revisar y replantear: {okr_name}",
+        "startup_id": startup_id,
+        "priority": "Alta",
+        "created_by_agent": True,
+        "agent_id": _agent_notion_id,
+    })
 
 
-def compute_studio_health(startups: list[dict]) -> float:
-    """
-    Calcula un health score del studio como promedio de scores de startups.
-    Si no hay scores, retorna 50.0 como baseline neutral.
-    """
+def compute_health(startups: list[dict]) -> float:
     scores = [s.get("score") for s in startups if s.get("score") is not None]
     return round(sum(scores) / len(scores), 1) if scores else 50.0
 
 
-def push_weekly_review(
-    startups: list[dict],
-    highlights: str,
-    blockers: str,
-) -> dict:
-    """Crea una Weekly Review en Notion con el health score calculado."""
+def push_weekly_review(startups: list[dict], at_risk_okrs: list[dict]) -> dict:
     week = datetime.utcnow().strftime("Semana %W — %Y")
-    health = compute_studio_health(startups)
-    startup_ids = [s["id"] for s in startups if s.get("id")]
-
+    highlights = "\n".join(
+        f"• {s['name']} — Stage: {s.get('stage','?')}  MRR: ${s.get('mrr') or 0:,.0f}"
+        for s in startups
+    ) or "Sin startups activas."
+    blockers = "\n".join(
+        f"• OKR en riesgo [{o.get('status')}]: {o['name']}"
+        for o in at_risk_okrs[:5]
+    ) or "Sin OKRs en riesgo."
     return _post("/weekly-reviews", {
         "week_name": week,
         "highlights": highlights,
         "blockers": blockers,
-        "health_score": health,
-        "startup_ids": startup_ids,
+        "health_score": compute_health(startups),
+        "startup_ids": [s["id"] for s in startups if s.get("id")],
     })
-
-
-def auto_weekly_review() -> dict:
-    """
-    Genera automáticamente la Weekly Review del studio.
-    Lee todas las startups activas y construye un resumen.
-    """
-    result = _get("/startups", {"status": "Activa"})
-    startups = result.get("startups", [])
-
-    if not startups:
-        return {"error": "No hay startups activas"}
-
-    at_risk = get_at_risk_okrs()
-    highlights_lines = [f"• {s['name']} — Stage: {s.get('stage', '?')}, MRR: ${s.get('mrr') or 0:,.0f}" for s in startups]
-    blockers_lines = [f"• OKR en riesgo: {o['name']}" for o in at_risk[:5]]
-
-    return push_weekly_review(
-        startups=startups,
-        highlights="\n".join(highlights_lines) or "Sin highlights esta semana.",
-        blockers="\n".join(blockers_lines) or "Sin blockers críticos.",
-    )

@@ -1,15 +1,14 @@
-"""
-Sincronización del Growth Intelligence Agent con Notion.
-Escribe Briefs y Tasks derivadas en las DBs correspondientes.
-"""
+"""Sincronización del Growth Intelligence Agent con Notion."""
 import os
+import re
 import httpx
+from datetime import datetime
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+_agent_notion_id: str | None = None
 
 
 def _post(path: str, payload: dict) -> dict:
-    """Llama al backend que centraliza todas las escrituras en Notion."""
     try:
         r = httpx.post(f"{BACKEND_URL}/notion{path}", json=payload, timeout=15)
         r.raise_for_status()
@@ -18,76 +17,55 @@ def _post(path: str, payload: dict) -> dict:
         return {"error": str(e)}
 
 
-def push_brief(
-    startup_id: str,
-    startup_name: str,
-    brief_content: str,
-    agent_notion_id: str | None = None,
-) -> dict:
-    """Publica un Brief generado en la DB 📋 Briefs de Notion."""
-    from datetime import datetime
+def register_self() -> str | None:
+    global _agent_notion_id
+    result = _post("/agents", {
+        "name": "Growth Intelligence Agent",
+        "type": "Growth",
+        "service_url": os.environ.get("GROWTH_INTELLIGENCE_URL", "http://growth_intelligence_agent:8004"),
+        "model": os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-6"),
+    })
+    _agent_notion_id = result.get("id")
+    return _agent_notion_id
+
+
+def push_brief(startup_id: str, startup_name: str, brief_content: str) -> dict:
     week = datetime.utcnow().strftime("%Y-W%W")
-    result = _post("/briefs", {
+    return _post("/briefs", {
         "name": f"Growth Brief — {startup_name} ({week})",
         "type": "Growth",
         "content": brief_content,
         "startup_id": startup_id,
-        "agent_id": agent_notion_id,
+        "agent_id": _agent_notion_id,
     })
-    return result
 
 
-def push_tasks_from_brief(
-    brief_content: str,
-    startup_id: str,
-    brief_notion_id: str | None = None,
-    agent_notion_id: str | None = None,
-) -> list[dict]:
-    """
-    Extrae tareas accionables del contenido del brief y las crea en ✅ Tasks.
-    Busca líneas que empiecen con '- [ ]', '•', '1.', etc.
-    """
-    import re
-    lines = brief_content.split("\n")
-    task_pattern = re.compile(r"^[\-\*\•]?\s*\[?\s*\]?\s*(.+)$")
+_ACTIONABLE = re.compile(
+    r"^[\-\*\•]?\s*\[?\s*\]?\s*(.{10,200})$",
+    re.MULTILINE,
+)
+_ACTION_VERBS = {
+    "implementa", "crea", "lanza", "define", "configura",
+    "prueba", "analiza", "contacta", "publica", "diseña",
+    "mide", "optimiza", "automatiza", "escala", "valida",
+}
 
-    tasks_created = []
-    for line in lines:
-        line = line.strip()
-        # Solo líneas que parecen items accionables y no son encabezados
-        if len(line) < 10 or line.startswith("#"):
-            continue
-        m = task_pattern.match(line)
-        if m and any(kw in line.lower() for kw in ["implementa", "crea", "lanza", "define", "configura", "prueba", "analiza", "contacta", "publica"]):
-            task_name = m.group(1)[:200]
+
+def push_tasks_from_brief(brief_content: str, startup_id: str, brief_notion_id: str | None = None) -> list[dict]:
+    """Extrae hasta 5 tasks accionables del brief y las crea en ✅ Tasks."""
+    created = []
+    for m in _ACTIONABLE.finditer(brief_content):
+        line = m.group(1).strip()
+        if any(v in line.lower() for v in _ACTION_VERBS):
             result = _post("/tasks", {
-                "name": task_name,
+                "name": line[:200],
                 "startup_id": startup_id,
                 "priority": "Alta",
                 "created_by_agent": True,
-                "agent_id": agent_notion_id,
+                "agent_id": _agent_notion_id,
             })
-            tasks_created.append(result)
-            if len(tasks_created) >= 5:  # Máx 5 tasks por brief
+            if "id" in result:
+                created.append(result)
+            if len(created) >= 5:
                 break
-
-    return tasks_created
-
-
-def push_experiment(
-    startup_id: str,
-    name: str,
-    hypothesis: str,
-    channel: str,
-    metric: str,
-    brief_id: str | None = None,
-) -> dict:
-    """Crea un experimento en 🧪 Experiments derivado del brief."""
-    return _post("/experiments", {
-        "name": name,
-        "hypothesis": hypothesis,
-        "channel": channel,
-        "metric": metric,
-        "startup_id": startup_id,
-        "brief_id": brief_id,
-    })
+    return created
